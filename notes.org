@@ -1,0 +1,10 @@
+#+title: Notes
+
++ How are the arguments to functions decided?
++ We have a working formatter?
++ List of features that would be useful to support for SQL:
+  - Completion (context aware, preferably?)
+  - Query execution
+  - [X] Query formatting
+  - [X] Function/keyword help? on hover? Should be gettable from the description
+    column on =mysql.help_topic= and like?
