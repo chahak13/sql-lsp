@@ -1,4 +1,9 @@
+import logging
 import mysql.connector
+
+from typing import List
+
+logger = logging.getLogger(__file__)
 
 
 class MySQLConnector:
@@ -13,5 +18,14 @@ class MySQLConnector:
             for name, description in crsr:
                 self.help_desc[name.lower()] = description
 
-    def get_help(self, function: str):
+    def get_help(self, function: str) -> str | None:
         return self.help_desc.get(function.lower(), None)
+
+    def execute_query(self, query: str) -> List[dict]:
+        rows = []
+        logger.info(f"execute_query (query): {query}")
+        with self.connection.cursor(dictionary=True) as crsr:
+            crsr.execute(query)
+            for row in crsr:
+                rows.append(row)
+        return rows

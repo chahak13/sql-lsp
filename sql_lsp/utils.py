@@ -1,4 +1,5 @@
-from typing import Optional
+from typing import Optional, Union, List
+from tabulate import tabulate
 
 from lsprotocol.types import Position, Range
 from pygls.workspace import TextDocument
@@ -22,3 +23,48 @@ def current_word_range(document: TextDocument, position: Position) -> Optional[R
             )
         start = end
     return None
+
+
+def get_text_in_range(document: TextDocument, text_range: Union[Range, dict]) -> str:
+    """Get document lines as string given a range."""
+    doc_lines = document.lines
+    if isinstance(text_range, Range):
+        first_line_index, first_char_index = (
+            text_range.start.line,
+            text_range.start.character,
+        )
+        last_line_index, last_char_index = text_range.end.line, text_range.end.character
+    elif isinstance(text_range, dict):
+        first_line_index, first_char_index = (
+            text_range["start"]["line"],
+            text_range["start"]["character"],
+        )
+        last_line_index, last_char_index = (
+            text_range["end"]["line"],
+            text_range["end"]["character"],
+        )
+    else:
+        raise TypeError(
+            f"`range` should either be a `Range` object or a dictionary."
+            f" found: {type(text_range)}"
+        )
+
+    if first_line_index == last_line_index:
+        if first_char_index == last_char_index:
+            return "\n".join(doc_lines)
+        return doc_lines[first_line_index][first_char_index:last_char_index]
+
+    lines = []
+    for i in range(first_line_index, last_line_index + 1):
+        if i == first_line_index:
+            lines.append(doc_lines[i][first_char_index:])
+        elif i == last_line_index:
+            lines.append(doc_lines[i][:last_char_index])
+        else:
+            lines.append(doc_lines[i])
+    return "\n".join(lines)
+
+
+def tabulate_result(rows: List[dict]) -> str:
+    """Tabulate the query results"""
+    return tabulate(rows, headers="keys", showindex=True, tablefmt="psql")
