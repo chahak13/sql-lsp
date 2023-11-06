@@ -1,5 +1,6 @@
 import logging
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
+
 from .mysql_connector import MySQLConnector
 
 logger = logging.getLogger(__file__)

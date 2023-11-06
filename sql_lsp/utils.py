@@ -1,10 +1,9 @@
-from typing import Optional, Union, List
-from tabulate import tabulate
+import logging
+from typing import List, Optional, Union
 
 from lsprotocol.types import Position, Range
 from pygls.workspace import TextDocument
-
-import logging
+from tabulate import tabulate
 
 logger = logging.getLogger(__file__)
 

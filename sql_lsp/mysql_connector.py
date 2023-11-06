@@ -1,9 +1,8 @@
 import logging
-import mysql.connector
-
-from typing import List, Tuple, Optional
-
 from copy import deepcopy
+from typing import List, Optional, Tuple
+
+import mysql.connector
 
 logger = logging.getLogger(__file__)
 
