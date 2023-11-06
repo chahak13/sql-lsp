@@ -1,8 +1,11 @@
+import json
+from pathlib import Path
 import logging
 
 from typing import Optional, List
 import sqlparse
 import sqlfluff
+from sqlfluff.core import FluffConfig
 from lsprotocol import validators
 from lsprotocol.types import (
     TEXT_DOCUMENT_COMPLETION,
@@ -38,7 +41,7 @@ from pygls import server
 from pygls.protocol import LanguageServerProtocol, lsp_method
 from pygls.workspace import TextDocument
 
-from .utils import get_text_in_range, tabulate_result
+from .utils import get_text_in_range, tabulate_result, current_word_range
 from .database import DBConnection
 
 logging.basicConfig(filename="sql-lsp-debug.log", filemode="w", level=logging.DEBUG)
@@ -48,7 +51,14 @@ logger = logging.getLogger(__file__)
 class SqlLanguageServerProtocol(LanguageServerProtocol):
     @lsp_method(INITIALIZE)
     def lsp_initialize(self, params: InitializeParams):
-        self.dbconn = DBConnection(db="mysql")
+        self.server_config = json.load(
+            open(
+                Path(params.root_uri.rsplit(":")[-1]).joinpath(".sql-ls/config.json"),
+                "r",
+            )
+        )
+        self.available_connections = self.server_config["connections"]
+        self.dbconn = DBConnection(config=self.available_connections[0])
         return super().lsp_initialize(params)
 
 
@@ -56,6 +66,8 @@ class SqlLanguageServer(server.LanguageServer):
     CMD_EXECUTE_QUERY = "executeQuery"
     CMD_SHOW_DATABASES = "showDatabases"
     CMD_SHOW_CONNECTIONS = "showConnections"
+    CMD_SHOW_CONNECTION_ALIASES = "showConnectionAliases"
+    CMD_SWITCH_CONNECTIONS = "switchConnections"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -82,13 +94,11 @@ sql_server = SqlLanguageServer(
 
 @sql_server.feature(TEXT_DOCUMENT_DID_OPEN)
 async def did_open(ls: SqlLanguageServer, params: DidOpenTextDocumentParams):
-    logger.debug("Please this should trigger.....")
     _publish_diagnostics(ls, params.text_document.uri)
 
 
 @sql_server.feature(TEXT_DOCUMENT_DID_CHANGE)
 async def did_change(ls: SqlLanguageServer, params: DidChangeTextDocumentParams):
-    logger.debug("Please this should trigger.....")
     _publish_diagnostics(ls, params.text_document.uri)
 
 
@@ -96,8 +106,19 @@ async def did_change(ls: SqlLanguageServer, params: DidChangeTextDocumentParams)
 def format_document(ls: SqlLanguageServer, params: DocumentFormattingParams):
     uri = params.text_document.uri
     document = ls.workspace.get_text_document(uri)
-    formatted_doc = sqlparse.format(
-        document.source, reindent=True, keyword_case="upper"
+    formatted_doc = sqlfluff.fix(
+        document.source,
+        config=FluffConfig(
+            {
+                "core": {
+                    "dialect": "mysql",
+                    "nocolor": True,
+                },
+                "indentation": {
+                    "ignore_comment_lines": True,
+                },
+            }
+        ),
     )
     return [
         TextEdit(
@@ -130,8 +151,6 @@ def code_action(
         2. Show Databases
         3. Show Connections
     """
-    # logger.debug("Code action params:")
-    # logger.debug(f"{params}")
     document = ls.workspace.get_text_document(params.text_document.uri)
     commands: List[Command] = [
         Command(
@@ -141,7 +160,13 @@ def code_action(
         ),
         Command(title="Show Databases", command=ls.CMD_SHOW_DATABASES),
         Command(title="Show Connections", command=ls.CMD_SHOW_CONNECTIONS),
+        Command(
+            title="Switch Connections",
+            command=ls.CMD_SWITCH_CONNECTIONS,
+            arguments=[params],
+        ),
     ]
+    # commands = []
     return commands
 
 
@@ -167,7 +192,9 @@ def execute_query(
     action_params = args[0][1]
     query = get_text_in_range(document, action_params["range"])
     logger.info(f"execute_query(query): {query}")
-    rows = ls.lsp.dbconn.execute_query(query)
+    rows, error = ls.lsp.dbconn.execute_query(query)
+    if error is not None:
+        return str(error)
     return tabulate_result(rows)
 
 
@@ -185,24 +212,60 @@ def show_databases(ls: SqlLanguageServer, *args) -> str:
     return tabulate_result(rows)
 
 
+@sql_server.command(sql_server.CMD_SHOW_CONNECTIONS)
+def show_connections(ls: SqlLanguageServer, *args) -> str:
+    """Show Databases in the connection."""
+    return tabulate_result(
+        [{**conn, "password": "****"} for conn in ls.lsp.available_connections]
+    )
+
+
+@sql_server.command(sql_server.CMD_SHOW_CONNECTION_ALIASES)
+def show_connection_aliases(ls: SqlLanguageServer, *args) -> str:
+    """Show aliases for all the connections.
+
+    Useful for providing a selection list to switch connections.
+    """
+    return "\n".join([conn["alias"] for conn in ls.lsp.available_connections])
+
+
+@sql_server.command(sql_server.CMD_SWITCH_CONNECTIONS)
+def switch_connections(ls: SqlLanguageServer, *args: tuple[CodeActionParams]):
+    """Switch Databases in the connection."""
+    selected_alias = args[0][0]
+    selected_config = [
+        con for con in ls.lsp.available_connections if con["alias"] == selected_alias
+    ][0]
+    ls.lsp.dbconn = DBConnection(selected_config)
+    ls.send_notification(f"Changed DB Connection to {selected_alias}")
+
+
 # {'line_no': 1,
 #  'line_pos': 65,
 #  'code': 'LT12',
 #  'description': 'Files must end with a single trailing newline.',
 #  'name': 'layout.end_of_file'}
 def _publish_diagnostics(ls: SqlLanguageServer, uri: str):
-    # logger.debug("URI IS: ", uri)
     document = ls.workspace.get_text_document(uri)
-    lint_diagnostics = sqlfluff.lint(document.source, dialect="mysql")
-    logger.debug("")
-    # logger.debug("")
-    logger.debug("Linting diagnostics:")
-    logger.debug(f"{lint_diagnostics}")
+    lint_diagnostics = sqlfluff.lint(
+        document.source,
+        dialect="mysql",
+        config=FluffConfig(
+            {
+                "core": {"dialect": "mysql", "nocolor": True, "ignore": "parsing"},
+                "indentation": {
+                    "ignore_comment_lines": True,
+                },
+            }
+        ),
+    )
+    # logger.debug("Linting diagnostics:")
+    # logger.debug(f"{lint_diagnostics}")
     diagnostics: list[Diagnostic] = [
         Diagnostic(
-            range=Range(
-                start=Position(line=x["line_no"], character=x["line_pos"]),
-                end=Position(line=x["line_no"], character=x["line_pos"]),
+            range=current_word_range(
+                document,
+                position=Position(line=x["line_no"] - 1, character=x["line_pos"] - 1),
             ),
             message=x["description"],
             code=x["code"],
@@ -210,7 +273,6 @@ def _publish_diagnostics(ls: SqlLanguageServer, uri: str):
         )
         for x in lint_diagnostics
     ]
-    # logger.debug(f"DIAGNOSTICS:  {diagnostics}")
     ls.publish_diagnostics(uri, diagnostics=diagnostics)
 
 

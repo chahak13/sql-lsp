@@ -4,6 +4,10 @@ from tabulate import tabulate
 from lsprotocol.types import Position, Range
 from pygls.workspace import TextDocument
 
+import logging
+
+logger = logging.getLogger(__file__)
+
 
 def current_word_range(document: TextDocument, position: Position) -> Optional[Range]:
     """Get the range of the word under the cursor."""
@@ -54,13 +58,16 @@ def get_text_in_range(document: TextDocument, text_range: Union[Range, dict]) ->
             return "\n".join(doc_lines)
         return doc_lines[first_line_index][first_char_index:last_char_index]
 
+    logger.debug("utils (doc_lines):")
+    logger.debug(f"{doc_lines}")
     lines = []
-    for i in range(first_line_index, last_line_index + 1):
+    for i in range(first_line_index - 1, last_line_index):
+        logger.debug(f"Line: {i} of {len(doc_lines) - 1}")
         if i == first_line_index:
             lines.append(doc_lines[i][first_char_index:])
         elif i == last_line_index:
             lines.append(doc_lines[i][:last_char_index])
-        else:
+        elif i < len(doc_lines) - 1:
             lines.append(doc_lines[i])
     return "\n".join(lines)
 
