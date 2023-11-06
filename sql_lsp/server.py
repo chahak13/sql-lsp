@@ -4,25 +4,35 @@ from pathlib import Path
 from typing import List, Optional
 
 import sqlfluff
-import sqlparse
 from lsprotocol import validators
-from lsprotocol.types import (INITIALIZE, TEXT_DOCUMENT_CODE_ACTION,
-                              TEXT_DOCUMENT_COMPLETION,
-                              TEXT_DOCUMENT_DID_CHANGE, TEXT_DOCUMENT_DID_OPEN,
-                              TEXT_DOCUMENT_FORMATTING, TEXT_DOCUMENT_HOVER,
-                              WORKSPACE_EXECUTE_COMMAND, CodeAction,
-                              CodeActionContext, CodeActionKind,
-                              CodeActionOptions, CodeActionParams, Command,
-                              CompletionItem, CompletionList, CompletionParams,
-                              Diagnostic, DidChangeTextDocumentParams,
-                              DidOpenTextDocumentParams,
-                              DocumentFormattingParams, ExecuteCommandParams,
-                              Hover, HoverParams, InitializeParams, Position,
-                              Range, TextEdit)
+from lsprotocol.types import (
+    INITIALIZE,
+    TEXT_DOCUMENT_CODE_ACTION,
+    TEXT_DOCUMENT_COMPLETION,
+    TEXT_DOCUMENT_DID_CHANGE,
+    TEXT_DOCUMENT_DID_OPEN,
+    TEXT_DOCUMENT_FORMATTING,
+    TEXT_DOCUMENT_HOVER,
+    CodeAction,
+    CodeActionParams,
+    Command,
+    CompletionItem,
+    CompletionList,
+    CompletionParams,
+    Diagnostic,
+    DidChangeTextDocumentParams,
+    DidOpenTextDocumentParams,
+    DocumentFormattingParams,
+    Hover,
+    HoverParams,
+    InitializeParams,
+    Position,
+    Range,
+    TextEdit,
+)
 from pygls import server
 from pygls.protocol import LanguageServerProtocol, lsp_method
 from pygls.workspace import TextDocument
-from sqlfluff.core import FluffConfig
 
 from .config import fluff_config
 from .database import DBConnection
@@ -47,6 +57,7 @@ class SqlLanguageServerProtocol(LanguageServerProtocol):
 
 
 class SqlLanguageServer(server.LanguageServer):
+    CMD_EXPLAIN_QUERY = "explainQuery"
     CMD_EXECUTE_QUERY = "executeQuery"
     CMD_SHOW_DATABASES = "showDatabases"
     CMD_SHOW_CONNECTIONS = "showConnections"
@@ -119,13 +130,19 @@ def code_action(
     """Get code actions.
 
     Currently supports:
-        1. Execute query
+        1. Explain query
+        2. Execute query
         2. Show Databases
         3. Show Connections
         4. Switch Connections
     """
     document = ls.workspace.get_text_document(params.text_document.uri)
     commands: List[Command] = [
+        Command(
+            title="Explain Query",
+            command=ls.CMD_EXPLAIN_QUERY,
+            arguments=[document, params],
+        ),
         Command(
             title="Execute Query",
             command=ls.CMD_EXECUTE_QUERY,
@@ -164,6 +181,29 @@ def execute_query(
     document = ls.workspace.get_text_document(document_args["uri"])
     action_params = args[0][1]
     query = get_text_in_range(document, action_params["range"])
+    logger.info(f"execute_query(query): {query}")
+    rows, error = ls.lsp.dbconn.execute_query(query)
+    if error is not None:
+        return str(error)
+    return tabulate_result(rows)
+
+
+@sql_server.command(sql_server.CMD_EXPLAIN_QUERY)
+def explain_query(
+    ls: SqlLanguageServer, *args: tuple[TextDocument, CodeActionParams]
+) -> str:
+    """Execute query."""
+    if not ls.lsp.dbconn:
+        raise KeyError(
+            "DB Connection not found on server. `SqlLanguageServer`"
+            " might not have been initialzied with `SqlLanguageServerProtocol`."
+            " Please check."
+        )
+    logger.info(f"explain_query (args): {args}")
+    document_args = args[0][0]
+    document = ls.workspace.get_text_document(document_args["uri"])
+    action_params = args[0][1]
+    query = "explain " + get_text_in_range(document, action_params["range"])
     logger.info(f"execute_query(query): {query}")
     rows, error = ls.lsp.dbconn.execute_query(query)
     if error is not None:
