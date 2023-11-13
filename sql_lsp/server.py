@@ -37,6 +37,7 @@ from pygls.workspace import TextDocument
 from .config import fluff_config
 from .database import DBConnection
 from .utils import current_word_range, get_text_in_range, tabulate_result
+from .completion import get_completion_candidates
 
 logging.basicConfig(filename="sql-lsp-debug.log", filemode="w", level=logging.DEBUG)
 logger = logging.getLogger(__file__)
@@ -71,18 +72,15 @@ class SqlLanguageServer(server.LanguageServer):
 sql_server = SqlLanguageServer("sql-ls", "v0.1", protocol_cls=SqlLanguageServerProtocol)
 
 
-# @sql_server.feature(TEXT_DOCUMENT_COMPLETION)
-# def completions(params: CompletionParams):
-#     logger.error("Does it even go here?")
-#     items = []
-#     document = server.workspace.get_document(params.text_document.uri)
-#     current_line = document.lines[params.position.line].strip()
-#     if current_line.startswith("he"):
-#         items = [
-#             CompletionItem(label="world"),
-#             CompletionItem(label="friend"),
-#         ]
-#     return CompletionList(is_incomplete=False, items=items)
+@sql_server.feature(TEXT_DOCUMENT_COMPLETION)
+def completions(ls: SqlLanguageServer, params: CompletionParams):
+    logger.error("Does it even go here?")
+    items = []
+    document = ls.workspace.get_document(params.text_document.uri)
+    items = get_completion_candidates(
+        document, params.position, ls.lsp.dbconn.connector.help_desc
+    )
+    return CompletionList(is_incomplete=False, items=items)
 
 
 @sql_server.feature(TEXT_DOCUMENT_DID_OPEN)
