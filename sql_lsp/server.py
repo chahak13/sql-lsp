@@ -68,7 +68,9 @@ class SqlLanguageServer(server.LanguageServer):
         super().__init__(*args, **kwargs)
 
 
-sql_server = SqlLanguageServer("sql-ls", "v0.1", protocol_cls=SqlLanguageServerProtocol)
+sql_server = SqlLanguageServer(
+    "sql-ls", "v0.0.1", protocol_cls=SqlLanguageServerProtocol
+)
 
 
 def _publish_diagnostics(ls: SqlLanguageServer, uri: str):
