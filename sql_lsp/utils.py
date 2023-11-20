@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 from lsprotocol.types import Position, Range
 from pygls.workspace import TextDocument
@@ -74,3 +74,27 @@ def get_text_in_range(document: TextDocument, text_range: Union[Range, dict]) ->
 def tabulate_result(rows: List[dict]) -> str:
     """Tabulate the query results"""
     return tabulate(rows, headers="keys", showindex=True, tablefmt="psql")
+
+
+def get_json_segment(
+    parse_result: Dict[str, Any], segment_type: str
+) -> Iterator[Union[str, Dict[str, Any], List[Dict[str, Any]]]]:
+    """Recursively search JSON parse result for specified segment type.
+
+    Args:
+        parse_result (Dict[str, Any]): JSON parse result from `sqlfluff.fix`.
+        segment_type (str): The segment type to search for.
+
+    Yields:
+        Iterator[Union[str, Dict[str, Any], List[Dict[str, Any]]]]:
+        Retrieves children of specified segment type as either a string for a raw
+        segment or as JSON or an array of JSON for non-raw segments.
+    """
+    for k, v in parse_result.items():
+        if k == segment_type:
+            yield v
+        elif isinstance(v, dict):
+            yield from get_json_segment(v, segment_type)
+        elif isinstance(v, list):
+            for s in v:
+                yield from get_json_segment(s, segment_type)

@@ -16,7 +16,6 @@ from lsprotocol.types import (
     CodeAction,
     CodeActionParams,
     Command,
-    CompletionItem,
     CompletionList,
     CompletionParams,
     Diagnostic,
@@ -34,10 +33,10 @@ from pygls import server
 from pygls.protocol import LanguageServerProtocol, lsp_method
 from pygls.workspace import TextDocument
 
+from .completion import get_completion_candidates
 from .config import fluff_config
 from .database import DBConnection
 from .utils import current_word_range, get_text_in_range, tabulate_result
-from .completion import get_completion_candidates
 
 logging.basicConfig(filename="sql-lsp-debug.log", filemode="w", level=logging.DEBUG)
 logger = logging.getLogger(__file__)
@@ -72,14 +71,36 @@ class SqlLanguageServer(server.LanguageServer):
 sql_server = SqlLanguageServer("sql-ls", "v0.1", protocol_cls=SqlLanguageServerProtocol)
 
 
+def _publish_diagnostics(ls: SqlLanguageServer, uri: str):
+    """Publish diagnostics to LSP server."""
+    document = ls.workspace.get_text_document(uri)
+    lint_diagnostics = sqlfluff.lint(
+        document.source, dialect="mysql", config=fluff_config
+    )
+    # logger.debug("Linting diagnostics:")
+    # logger.debug(f"{lint_diagnostics}")
+    diagnostics: list[Diagnostic] = [
+        Diagnostic(
+            range=current_word_range(
+                document,
+                position=Position(line=x["line_no"] - 1, character=x["line_pos"] - 1),
+            ),
+            message=x["description"],
+            code=x["code"],
+            # code_description=CodeDescription(
+            #     href=f"https://docs.sqlfluff.com/en/latest/rules.html#rule-{x['name']}"
+            # ),
+        )
+        for x in lint_diagnostics
+    ]
+    ls.publish_diagnostics(uri, diagnostics=diagnostics)
+
+
 @sql_server.feature(TEXT_DOCUMENT_COMPLETION)
 def completions(ls: SqlLanguageServer, params: CompletionParams):
-    logger.error("Does it even go here?")
     items = []
     document = ls.workspace.get_document(params.text_document.uri)
-    items = get_completion_candidates(
-        document, params.position, ls.lsp.dbconn.connector.help_desc
-    )
+    items = get_completion_candidates(document, params.position, ls.lsp.dbconn)
     return CompletionList(is_incomplete=False, items=items)
 
 
@@ -154,6 +175,7 @@ def code_action(
             arguments=[params],
         ),
     ]
+    logging.info(f"Trying to send: {commands}")
     # commands = []
     return commands
 
@@ -249,30 +271,3 @@ def switch_connections(ls: SqlLanguageServer, *args: tuple[CodeActionParams]):
     ][0]
     ls.lsp.dbconn = DBConnection(selected_config)
     ls.send_notification(f"Changed DB Connection to {selected_alias}")
-
-
-# {'line_no': 1,
-#  'line_pos': 65,
-#  'code': 'LT12',
-#  'description': 'Files must end with a single trailing newline.',
-#  'name': 'layout.end_of_file'}
-def _publish_diagnostics(ls: SqlLanguageServer, uri: str):
-    document = ls.workspace.get_text_document(uri)
-    lint_diagnostics = sqlfluff.lint(
-        document.source, dialect="mysql", config=fluff_config
-    )
-    # logger.debug("Linting diagnostics:")
-    # logger.debug(f"{lint_diagnostics}")
-    diagnostics: list[Diagnostic] = [
-        Diagnostic(
-            range=current_word_range(
-                document,
-                position=Position(line=x["line_no"] - 1, character=x["line_pos"] - 1),
-            ),
-            message=x["description"],
-            code=x["code"],
-            code_description=x["name"],
-        )
-        for x in lint_diagnostics
-    ]
-    ls.publish_diagnostics(uri, diagnostics=diagnostics)
