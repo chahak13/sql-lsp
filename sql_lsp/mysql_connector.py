@@ -52,7 +52,7 @@ class MySQLConnector:
             crsr.execute("select database();")
             current_database = crsr.fetchone()[0]
             topic_help_query = "use mysql;" if current_database != "mysql" else ""
-            topic_help_query += "select name, description from help_topic;"
+            topic_help_query += "SELECT NAME, DESCRIPTION FROM help_topic;"
             crsr.execute(topic_help_query)
             for name, description in crsr:
                 self.help_cache[name.lower()] = description
@@ -74,46 +74,46 @@ class MySQLConnector:
     def _get_schema_tables(self):
         """Initialize table cache."""
         table_query = (
-            f"select table_name, table_type from information_schema.tables"
-            f" where table_schema='{self._config['database']}';"
+            f"SELECT TABLE_NAME, TABLE_TYPE FROM INFORMATION_SCHEMA.TABLES"
+            f" WHERE TABLE_SCHEMA='{self._config['database']}';"
         )
         result, _ = self.execute_query(table_query)
         tables = result if result else []
         for table in tables:
-            result, err = self.execute_query(f"describe {table['table_name']};")
-            self.table_cache[table["table_name"]] = TableInfo(
-                name=table["table_name"],
-                type=table["table_type"],
+            result, err = self.execute_query(f"DESCRIBE {table['TABLE_NAME']};")
+            self.table_cache[table["TABLE_NAME"]] = TableInfo(
+                name=table["TABLE_NAME"],
+                type=table["TABLE_TYPE"],
                 description=tabulate_result(result),
             )
 
     def _get_all_columns(self):
         """Fetch all columns."""
         query = (
-            "select table_catalog, table_schema, table_name, column_name, "
-            "column_default, is_nullable, data_type, column_type, column_key "
-            "from information_schema.columns"
+            "SELECT TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, "
+            "COLUMN_DEFAULT, IS_NULLABLE, DATA_TYPE, COLUMN_TYPE, COLUMN_KEY "
+            "FROM INFORMATION_SCHEMA.COLUMNS"
         )
         result, _ = self.execute_query(query)
         if result:
             for row in result:
-                self.column_cache[row["column_name"]] = ColumnInfo(
-                    row["column_name"],
-                    row["column_type"],
-                    row["column_default"],
-                    row["is_nullable"],
-                    row["column_key"],
-                    row["table_name"],
+                self.column_cache[row["COLUMN_NAME"]] = ColumnInfo(
+                    row["COLUMN_NAME"],
+                    row["COLUMN_TYPE"],
+                    row["COLUMN_DEFAULT"],
+                    row["IS_NULLABLE"],
+                    row["COLUMN_KEY"],
+                    row["TABLE_NAME"],
                 )
-                self.table_column_map[row["table_name"]][
-                    row["column_name"]
+                self.table_column_map[row["TABLE_NAME"]][
+                    row["COLUMN_NAME"]
                 ] = ColumnInfo(
-                    row["column_name"],
-                    row["column_type"],
-                    row["column_default"],
-                    row["is_nullable"],
-                    row["column_key"],
-                    row["table_name"],
+                    row["COLUMN_NAME"],
+                    row["COLUMN_TYPE"],
+                    row["COLUMN_DEFAULT"],
+                    row["IS_NULLABLE"],
+                    row["COLUMN_KEY"],
+                    row["TABLE_NAME"],
                 )
 
     def get_help(self, function: str) -> Optional[str]:

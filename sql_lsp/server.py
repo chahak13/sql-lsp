@@ -69,7 +69,7 @@ class SqlLanguageServer(server.LanguageServer):
 
 
 sql_server = SqlLanguageServer(
-    "sql-ls", "v0.0.1", protocol_cls=SqlLanguageServerProtocol
+    "sql-ls", "v0.0.2", protocol_cls=SqlLanguageServerProtocol
 )
 
 
