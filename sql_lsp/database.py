@@ -65,4 +65,4 @@ class DBConnection:
             A values view of ColumnInfo objects for each column present in the
         table/database.
         """
-        return self.connector.get_columns()
+        return self.connector.get_columns(table_name=table_name)

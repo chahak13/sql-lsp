@@ -31,15 +31,8 @@ def get_segment_at_point(
         if segments[i].pos_marker.line_no != pos.line + 1:
             break
     line_end_idx = i
-    # line_end_idx = i - 1 if i != len(segments) else len(segments)
 
     line_segments = segments[line_start_idx:line_end_idx]
-    # logger.debug(f"Looking at pos: {pos}")
-    # logger.debug(
-    #     f"Total segments: {len(segments)}, Line start: {line_start_idx}, line end: {line_end_idx}"
-    # )
-    # logger.debug(f"segments: {segments}")
-    # logger.debug(f"line_segments: {line_segments}")
     segment_idx = (
         bisect_left(
             line_segments,
@@ -50,11 +43,7 @@ def get_segment_at_point(
         if len(line_segments) != 1
         else 0
     )
-    # logger.debug(
-    #     f"segment pos: {[(x.raw, attrgetter('pos_marker.line_pos')(x)) for x in line_segments]}"
-    # )
-    # logger.debug(f"segment_idx: {segment_idx}")
-    return line_segments[segment_idx], segment_idx
+    return line_segments[segment_idx], line_start_idx + segment_idx
 
 
 def get_last_word(document: TextDocument, pos: Position):
@@ -69,11 +58,21 @@ def get_last_word(document: TextDocument, pos: Position):
 
 
 def _get_alias_table_name(alias: str, parsed_query: BaseSegment) -> Optional[str]:
-    from_elements = get_json_segment(parsed_query, "from_expression_elements")
+    from_elements = list(
+        get_json_segment(
+            parsed_query.as_record(show_raw=True), "from_expression_element"
+        )
+    )
     for element in from_elements:
-        if element.get("alias_expression", {}).get("naked_identifier", "") == alias:
-            return get_json_segment(
-                element.get("table_expression", {}), "naked_identifier"
+        guessed_alias = element.get("alias_expression", {}).get("naked_identifier", "")
+        logger.debug(
+            f"guessed_alias: {guessed_alias}, alias: {alias}, {guessed_alias == alias}"
+        )
+        if guessed_alias == alias:
+            return list(
+                get_json_segment(
+                    element.get("table_expression", {}), "naked_identifier"
+                )
             )[-1]
     return None
 
@@ -94,13 +93,12 @@ def get_completion_candidates(
     current_segment, segment_id = get_segment_at_point(segments, pos)
     if not current_segment:
         return []
-    logger.info(f"Completing segment: {current_segment}")
-    logger.info(f"All segments: {segments}")
+    logger.info(f"Completing segment: {current_segment} at id: {segment_id}")
     match current_segment.get_parent()[0]:
         case ColumnReferenceSegment():
             if segments[segment_id - 1].raw == ".":
                 alias = segments[segment_id - 2]
-                table_name = _get_alias_table_name(alias, parsed_query)
+                table_name = _get_alias_table_name(alias.raw, parsed_query)
                 columns = dbconn.get_columns(table_name=table_name)
             else:
                 columns = dbconn.get_columns()
