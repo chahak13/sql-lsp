@@ -45,12 +45,16 @@ logger = logging.getLogger(__file__)
 class SqlLanguageServerProtocol(LanguageServerProtocol):
     @lsp_method(INITIALIZE)
     def lsp_initialize(self, params: InitializeParams):
-        self.server_config = json.load(
-            open(
+        try:
+            with open(
                 Path(params.root_uri.rsplit(":")[-1]).joinpath(".sql-ls/config.json"),
                 "r",
-            )
-        )
+            ) as config_file:
+                self.server_config = json.load(config_file)
+        except FileNotFoundError:
+            logger.error("Couldn't find .sql-ls/config.json, please create one.")
+        except Exception as e:
+            raise e
         self.available_connections = self.server_config["connections"]
         self.dbconn = DBConnection(config=self.available_connections[0])
         return super().lsp_initialize(params)
