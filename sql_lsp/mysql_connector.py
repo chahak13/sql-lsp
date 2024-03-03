@@ -86,6 +86,7 @@ class MySQLConnector:
                 type=table["TABLE_TYPE"],
                 description=tabulate_result(result),
             )
+            self.help_cache[table["TABLE_NAME"]] = tabulate_result(result)
 
     def _get_all_columns(self):
         """Fetch all columns."""

@@ -8,3 +8,5 @@
   - [X] Query formatting
   - [X] Function/keyword help? on hover? Should be gettable from the description
     column on =mysql.help_topic= and like?
+  - [ ] Change the connections json format to make it a dict keyed with alias
+    instead of array.

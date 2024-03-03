@@ -82,6 +82,7 @@ def get_completion_candidates(
 ):
     keywords = dbconn.connector.help_cache
     last_word = get_last_word(document, pos)
+    logger.debug(f"last_word: {last_word}")
     match_regex = re.compile(last_word, re.IGNORECASE)
     candidates = []
 
@@ -96,8 +97,15 @@ def get_completion_candidates(
     logger.info(f"Completing segment: {current_segment} at id: {segment_id}")
     match current_segment.get_parent()[0]:
         case ColumnReferenceSegment():
-            if segments[segment_id - 1].raw == ".":
+            curr_seg = segments[segment_id].raw
+            prev_seg = segments[segment_id - 1].raw
+            if curr_seg == "." or prev_seg == ".":
                 alias = segments[segment_id - 2]
+                alias = (
+                    segments[segment_id - 1]
+                    if curr_seg == "."
+                    else segments[segment_id - 2]
+                )
                 table_name = _get_alias_table_name(alias.raw, parsed_query)
                 columns = dbconn.get_columns(table_name=table_name)
             else:

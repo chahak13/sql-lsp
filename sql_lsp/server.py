@@ -1,5 +1,7 @@
 import json
 import logging
+import logging.config
+import os
 from pathlib import Path
 from typing import List, Optional
 
@@ -38,7 +40,17 @@ from .config import fluff_config
 from .database import DBConnection
 from .utils import current_word_range, get_text_in_range, tabulate_result
 
-logging.basicConfig(filename="sql-lsp-debug.log", filemode="w", level=logging.DEBUG)
+# logging.config.dictConfig({"version": 1, "disable_existing_loggers": True})
+sqlfluff_logger = logging.getLogger("sqlfluff")
+sqlfluff_logger.setLevel(logging.WARNING)
+sqlfluff_rules_logger = logging.getLogger("sqlfluff.rules.reflow")
+sqlfluff_rules_logger.setLevel(logging.WARNING)
+
+if not Path("~/.cache/sql-lsp/").is_dir():
+    os.makedirs("~/.cache/sql-lsp/")
+logging.basicConfig(
+    filename="~/.cache/sql-lsp/sql-lsp-debug.log", filemode="w", level=logging.DEBUG
+)
 logger = logging.getLogger(__file__)
 
 
@@ -56,7 +68,7 @@ class SqlLanguageServerProtocol(LanguageServerProtocol):
         except Exception as e:
             raise e
         self.available_connections = self.server_config["connections"]
-        self.dbconn = DBConnection(config=self.available_connections[0])
+        self.dbconn = DBConnection(config=list(self.available_connections.items())[0])
         return super().lsp_initialize(params)
 
 
@@ -83,8 +95,8 @@ def _publish_diagnostics(ls: SqlLanguageServer, uri: str):
     lint_diagnostics = sqlfluff.lint(
         document.source, dialect="mysql", config=fluff_config
     )
-    # logger.debug("Linting diagnostics:")
-    # logger.debug(f"{lint_diagnostics}")
+    logger.debug("chahak: Linting diagnostics:")
+    logger.debug(f"{lint_diagnostics}")
     diagnostics: list[Diagnostic] = [
         Diagnostic(
             range=current_word_range(
@@ -107,6 +119,7 @@ def completions(ls: SqlLanguageServer, params: CompletionParams):
     items = []
     document = ls.workspace.get_document(params.text_document.uri)
     items = get_completion_candidates(document, params.position, ls.lsp.dbconn)
+    logger.info(f"Completion items: {items}")
     return CompletionList(is_incomplete=False, items=items)
 
 
@@ -181,7 +194,7 @@ def code_action(
             arguments=[params],
         ),
     ]
-    logging.info(f"Trying to send: {commands}")
+    logger.info(f"Trying to send: {commands}")
     # commands = []
     return commands
 
