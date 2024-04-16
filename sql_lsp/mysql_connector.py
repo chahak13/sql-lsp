@@ -37,7 +37,6 @@ class MySQLConnector:
     def __init__(self, config: dict):
         self._config = config
         connection_args = deepcopy(config)
-        connection_args.pop("alias")
         connection_args.pop("driver")
         self.connection = mysql.connector.connect(**connection_args)
         self.help_cache = {}

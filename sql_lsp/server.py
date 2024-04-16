@@ -46,10 +46,14 @@ sqlfluff_logger.setLevel(logging.WARNING)
 sqlfluff_rules_logger = logging.getLogger("sqlfluff.rules.reflow")
 sqlfluff_rules_logger.setLevel(logging.WARNING)
 
-if not Path("~/.cache/sql-lsp/").is_dir():
-    os.makedirs("~/.cache/sql-lsp/")
+server_dir = Path(f"{os.getenv('HOME')}/.local/sql-lsp").absolute()
+if not server_dir.is_dir():
+    os.makedirs(server_dir, exist_ok=True)
 logging.basicConfig(
-    filename="~/.cache/sql-lsp/sql-lsp-debug.log", filemode="w", level=logging.DEBUG
+    filename=server_dir.joinpath("sql-lsp-debug.log"),
+    filemode="w",
+    level=logging.DEBUG,
+    format="[%(levelname)s - %(asctime)s] %(module)s:%(funcName)s(%(lineno)d) %(message)s",
 )
 logger = logging.getLogger(__file__)
 
@@ -65,10 +69,11 @@ class SqlLanguageServerProtocol(LanguageServerProtocol):
                 self.server_config = json.load(config_file)
         except FileNotFoundError:
             logger.error("Couldn't find .sql-ls/config.json, please create one.")
+            self.show_message("Couldn't find .sql-ls/config.json, please create one.")
         except Exception as e:
             raise e
         self.available_connections = self.server_config["connections"]
-        self.dbconn = DBConnection(config=list(self.available_connections.items())[0])
+        self.dbconn = DBConnection(config=list(self.available_connections.values())[0])
         return super().lsp_initialize(params)
 
 
@@ -266,9 +271,12 @@ def show_databases(ls: SqlLanguageServer, *args) -> str:
 
 @sql_server.command(sql_server.CMD_SHOW_CONNECTIONS)
 def show_connections(ls: SqlLanguageServer, *args) -> str:
-    """Show Databases in the connection."""
+    """Show available connections."""
     return tabulate_result(
-        [{**conn, "password": "****"} for conn in ls.lsp.available_connections]
+        [
+            {"alias": alias, **conn, "password": "****"}
+            for alias, conn in ls.lsp.available_connections.items()
+        ]
     )
 
 
@@ -278,15 +286,13 @@ def show_connection_aliases(ls: SqlLanguageServer, *args) -> str:
 
     Useful for providing a selection list to switch connections.
     """
-    return "\n".join([conn["alias"] for conn in ls.lsp.available_connections])
+    return "\n".join(list(ls.lsp.available_connections.keys()))
 
 
 @sql_server.command(sql_server.CMD_SWITCH_CONNECTIONS)
 def switch_connections(ls: SqlLanguageServer, *args: tuple[CodeActionParams]):
     """Switch Databases in the connection."""
     selected_alias = args[0][0]
-    selected_config = [
-        con for con in ls.lsp.available_connections if con["alias"] == selected_alias
-    ][0]
+    selected_config = ls.lsp.available_connections[selected_alias]
     ls.lsp.dbconn = DBConnection(selected_config)
     ls.send_notification(f"Changed DB Connection to {selected_alias}")
