@@ -2,7 +2,6 @@ import logging
 import re
 from bisect import bisect_left
 from operator import attrgetter
-from typing import List, Optional
 
 from lsprotocol.types import CompletionItem, CompletionItemKind, Position
 from pygls.workspace import TextDocument
@@ -64,7 +63,9 @@ def _get_alias_table_name(alias: str, parsed_query: BaseSegment) -> str | None:
         )
     )
     for element in from_elements:
-        guessed_alias = element.get("alias_expression", {}).get("naked_identifier", "")
+        guessed_alias: str = element.get("alias_expression", {}).get(
+            "naked_identifier", ""
+        )
         logger.debug(
             f"guessed_alias: {guessed_alias}, alias: {alias}, {guessed_alias == alias}"
         )
@@ -79,12 +80,12 @@ def _get_alias_table_name(alias: str, parsed_query: BaseSegment) -> str | None:
 
 def get_completion_candidates(
     document: TextDocument, pos: Position, dbconn: DBConnection
-):
+) -> list[CompletionItem]:
     keywords = dbconn.connector.help_cache
     last_word = get_last_word(document, pos)
     logger.debug(f"last_word: {last_word}")
     match_regex = re.compile(last_word, re.IGNORECASE)
-    candidates = []
+    candidates: list[CompletionItem] = []
 
     text = document.source
     lexer = Lexer(config=fluff_config)

@@ -1,14 +1,21 @@
 import logging
-from typing import Dict, List, Optional, Tuple, ValuesView
+from collections.abc import ValuesView
 
-from .mysql_connector import ColumnInfo, MySQLConnector, TableInfo
+from .mysql_connector import (
+    ColumnInfo,
+    MySQLConnector,
+    TableInfo,
+    MysqlConnectionConfig,
+)
 
 logger = logging.getLogger(__file__)
 SUPPORTED_DBS = ["mysql", "mariadb"]
 
+ConnectionConfig = MysqlConnectionConfig
+
 
 class DBConnection:
-    def __init__(self, config: dict):
+    def __init__(self, config: ConnectionConfig):
         self._config = config
         match config["driver"]:
             case "mysql":
@@ -18,13 +25,15 @@ class DBConnection:
             case _:
                 raise ValueError(
                     f"{config['driver']} is not supported yet."
-                    f" Supported databases - {SUPPORTED_DBS}"
+                    + f" Supported databases - {SUPPORTED_DBS}"
                 )
 
     def get_help(self, function: str) -> str | None:
         return self.connector.get_help(function)
 
-    def execute_query(self, query: str) -> Tuple[Optional[List[Dict]], Optional[str]]:
+    def execute_query(
+        self, query: str
+    ) -> tuple[list[dict[str, str]] | None, Exception | None]:
         """Execute the given query on the database.
 
         Parameters
@@ -34,7 +43,7 @@ class DBConnection:
 
         Returns
         -------
-        Tuple[Optional[List[Dict]], Optional[String]]
+        tuple[list[dict[str, str]] | None, Exception | None]
             A tuple of (results, error). The results are a list of dictionaries
             where the keys are the columns returned by the query.
         """
@@ -45,7 +54,7 @@ class DBConnection:
         """Fetch dictionary of table and their types."""
         return self.connector.get_tables()
 
-    def get_columns(self, table_name: str = None) -> ValuesView[ColumnInfo]:
+    def get_columns(self, table_name: str | None = "") -> ValuesView[ColumnInfo]:
         """Fetch list of columns.
 
         If table name is provided and valid, columns for only that table are

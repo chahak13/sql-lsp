@@ -13,7 +13,7 @@ authors = ["Chahak Mehta <chahakmehta013@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.12"
 pygls = "^1.1.1"
 mysql-connector-python = "^8.2.0"
 sqlfluff = "^2.3.5"

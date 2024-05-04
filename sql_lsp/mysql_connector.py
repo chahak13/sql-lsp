@@ -33,14 +33,14 @@ class TableInfo:
     description: str
 
 
-ConnectionConfig = TypedDict(
-    "ConnectionConfig",
-    {"driver": str, "host": str, "usernam": str, "database": str, "password": str},
+MysqlConnectionConfig = TypedDict(
+    "MysqlConnectionConfig",
+    {"driver": str, "host": str, "username": str, "database": str, "password": str},
 )
 
 
 class MySQLConnector:
-    def __init__(self, config: ConnectionConfig):  # type: ignore[reportMissingSuperCall]
+    def __init__(self, config: MysqlConnectionConfig):  # type: ignore[reportMissingSuperCall]
         """MySQL connector for the database.
 
         Parameters
@@ -168,7 +168,7 @@ class MySQLConnector:
         logger.info(f"Table cache: {self.table_cache}")
         return self.table_cache.values()
 
-    def get_columns(self, table_name: str = "") -> ValuesView[ColumnInfo]:
+    def get_columns(self, table_name: str | None = "") -> ValuesView[ColumnInfo]:
         """Fetch list of columns.
 
         If table name is provided and valid, columns for only that table are

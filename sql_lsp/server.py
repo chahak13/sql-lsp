@@ -2,10 +2,12 @@ import json
 import logging
 import logging.config
 import os
-from pathlib import Path
-from typing import List, Optional
 
 import sqlfluff
+
+from pathlib import Path
+from typing import override, TypedDict, ParamSpec
+
 from lsprotocol import validators
 from lsprotocol.types import (
     INITIALIZE,
@@ -37,10 +39,11 @@ from pygls.workspace import TextDocument
 
 from .completion import get_completion_candidates
 from .config import fluff_config
-from .database import DBConnection
+from .database import DBConnection, ConnectionConfig
 from .utils import current_word_range, get_text_in_range, tabulate_result
 
-# logging.config.dictConfig({"version": 1, "disable_existing_loggers": True})
+P = ParamSpec("P")
+
 sqlfluff_logger = logging.getLogger("sqlfluff")
 sqlfluff_logger.setLevel(logging.WARNING)
 sqlfluff_rules_logger = logging.getLogger("sqlfluff.rules.reflow")
@@ -58,21 +61,28 @@ logging.basicConfig(
 logger = logging.getLogger(__file__)
 
 
+ServerConnectionConfigs = TypedDict(
+    "ServerConnectionConfigs", {"connections": dict[str, ConnectionConfig]}
+)
+
+
 class SqlLanguageServerProtocol(LanguageServerProtocol):
     @lsp_method(INITIALIZE)
+    @override
     def lsp_initialize(self, params: InitializeParams):
         try:
             with open(
                 Path(params.root_uri.rsplit(":")[-1]).joinpath(".sql-ls/config.json"),
                 "r",
             ) as config_file:
-                self.server_config = json.load(config_file)
+                server_config: ServerConnectionConfigs = json.load(config_file)
         except FileNotFoundError:
             logger.error("Couldn't find .sql-ls/config.json, please create one.")
             self.show_message("Couldn't find .sql-ls/config.json, please create one.")
+            return
         except Exception as e:
             raise e
-        self.available_connections = self.server_config["connections"]
+        self.available_connections = server_config["connections"]
         self.dbconn = DBConnection(config=list(self.available_connections.values())[0])
         return super().lsp_initialize(params)
 
@@ -84,9 +94,6 @@ class SqlLanguageServer(server.LanguageServer):
     CMD_SHOW_CONNECTIONS = "showConnections"
     CMD_SHOW_CONNECTION_ALIASES = "showConnectionAliases"
     CMD_SWITCH_CONNECTIONS = "switchConnections"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
 
 
 sql_server = SqlLanguageServer(
@@ -162,14 +169,12 @@ async def hover(ls: SqlLanguageServer, params: HoverParams) -> Hover | None:
     """LSP handler for textDocument/hover request."""
     document = ls.workspace.get_text_document(params.text_document.uri)
     word = document.word_at_position(params.position)
-    help_str = ls.lsp.dbconn.get_help(word)
+    help_str: str = ls.lsp.dbconn.get_help(word)
     return Hover(contents=help_str)
 
 
 @sql_server.feature(TEXT_DOCUMENT_CODE_ACTION)
-def code_action(
-    ls: SqlLanguageServer, params: CodeActionParams
-) -> Optional[List[CodeAction]]:
+def code_action(ls: SqlLanguageServer, params: CodeActionParams) -> list[Command]:
     """Get code actions.
 
     Currently supports:
@@ -180,7 +185,7 @@ def code_action(
         4. Switch Connections
     """
     document = ls.workspace.get_text_document(params.text_document.uri)
-    commands: List[Command] = [
+    commands: list[Command] = [
         Command(
             title="Explain Query",
             command=ls.CMD_EXPLAIN_QUERY,
@@ -217,8 +222,8 @@ def execute_query(
     if not ls.lsp.dbconn:
         raise KeyError(
             "DB Connection not found on server. `SqlLanguageServer`"
-            " might not have been initialzied with `SqlLanguageServerProtocol`."
-            " Please check."
+            + " might not have been initialzied with `SqlLanguageServerProtocol`."
+            + " Please check."
         )
     logger.info(f"chahak: execute_query (args): {args}")
     document_args = args[0][0]
@@ -240,8 +245,8 @@ def explain_query(
     if not ls.lsp.dbconn:
         raise KeyError(
             "DB Connection not found on server. `SqlLanguageServer`"
-            " might not have been initialzied with `SqlLanguageServerProtocol`."
-            " Please check."
+            + " might not have been initialzied with `SqlLanguageServerProtocol`."
+            + " Please check."
         )
     logger.info(f"explain_query (args): {args}")
     document_args = args[0][0]
@@ -256,13 +261,13 @@ def explain_query(
 
 
 @sql_server.command(sql_server.CMD_SHOW_DATABASES)
-def show_databases(ls: SqlLanguageServer, *args) -> str:
+def show_databases(ls: SqlLanguageServer) -> str:
     """Show Databases in the connection."""
     if not ls.lsp.dbconn:
         raise KeyError(
             "DB Connection not found on server. `SqlLanguageServer`"
-            " might not have been initialzied with `SqlLanguageServerProtocol`."
-            " Please check."
+            + " might not have been initialzied with `SqlLanguageServerProtocol`."
+            + " Please check."
         )
     query = "show databases;"
     rows = ls.lsp.dbconn.execute_query(query)
@@ -270,7 +275,7 @@ def show_databases(ls: SqlLanguageServer, *args) -> str:
 
 
 @sql_server.command(sql_server.CMD_SHOW_CONNECTIONS)
-def show_connections(ls: SqlLanguageServer, *args) -> str:
+def show_connections(ls: SqlLanguageServer) -> str:
     """Show available connections."""
     return tabulate_result(
         [
@@ -281,7 +286,7 @@ def show_connections(ls: SqlLanguageServer, *args) -> str:
 
 
 @sql_server.command(sql_server.CMD_SHOW_CONNECTION_ALIASES)
-def show_connection_aliases(ls: SqlLanguageServer, *args) -> str:
+def show_connection_aliases(ls: SqlLanguageServer) -> str:
     """Show aliases for all the connections.
 
     Useful for providing a selection list to switch connections.
