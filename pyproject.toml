@@ -1,3 +1,7 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
 [tool.poetry.scripts]
 sql-ls = "sql_lsp.__main__:main"
 
@@ -21,6 +25,5 @@ isort = "^5.12.0"
 black = "^23.10.1"
 basedpyright = "^1.10.1"
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[tool.basedpyright]
+reportUnusedCallResult = false

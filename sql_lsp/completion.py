@@ -19,8 +19,8 @@ logger = logging.getLogger(__file__)
 
 
 def get_segment_at_point(
-    segments: List[BaseSegment], pos: Position
-) -> Optional[BaseSegment]:
+    segments: list[BaseSegment], pos: Position
+) -> tuple[BaseSegment | None, int]:
     # Get first segment in given line
     line_start_idx = bisect_left(
         segments, pos.line + 1, key=attrgetter("pos_marker.line_no")
@@ -49,7 +49,7 @@ def get_segment_at_point(
 def get_last_word(document: TextDocument, pos: Position):
     line = document.lines[pos.line][: pos.character]
     last_word_regex = re.compile(r"[\w`]+$", re.IGNORECASE)
-    word_matches = last_word_regex.findall(line)
+    word_matches: list[str] = last_word_regex.findall(line)
     last_word = "*"
     if len(word_matches) != 0:
         last_word = word_matches[-1]
@@ -57,7 +57,7 @@ def get_last_word(document: TextDocument, pos: Position):
     return last_word
 
 
-def _get_alias_table_name(alias: str, parsed_query: BaseSegment) -> Optional[str]:
+def _get_alias_table_name(alias: str, parsed_query: BaseSegment) -> str | None:
     from_elements = list(
         get_json_segment(
             parsed_query.as_record(show_raw=True), "from_expression_element"
@@ -95,8 +95,10 @@ def get_completion_candidates(
     if not current_segment:
         return []
     logger.info(f"Completing segment: {current_segment} at id: {segment_id}")
+    logger.info(f"Parent segment: {current_segment.get_parent()[0]}")
     match current_segment.get_parent()[0]:
         case ColumnReferenceSegment():
+            logger.info("Matched column segment")
             curr_seg = segments[segment_id].raw
             prev_seg = segments[segment_id - 1].raw
             if curr_seg == "." or prev_seg == ".":
@@ -110,12 +112,13 @@ def get_completion_candidates(
                 columns = dbconn.get_columns(table_name=table_name)
             else:
                 columns = dbconn.get_columns()
+                logger.info(f"Columns from db: {columns}")
             candidates.extend(
                 [
                     CompletionItem(
                         label=col.name,
                         kind=CompletionItemKind.Field,
-                        detail=col.table_name,
+                        detail=f"{col.table_name} (column)",
                         documentation=str(col),
                         sort_text="0",
                     )
@@ -124,13 +127,15 @@ def get_completion_candidates(
                 ]
             )
         case TableReferenceSegment():
+            logger.info("Matched table reference segment")
             tables = dbconn.get_tables()
+            logger.info(f"tables from db: {tables}")
             candidates.extend(
                 [
                     CompletionItem(
                         label=table.name,
                         kind=CompletionItemKind.Field,
-                        detail=table.type,
+                        detail="(table)",
                         documentation=table.description,
                         sort_text="1",
                     )

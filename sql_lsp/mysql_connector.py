@@ -3,7 +3,8 @@ from collections import defaultdict
 from collections.abc import ValuesView
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from traceback import format_exception
+from typing import TypedDict
 
 import mysql.connector
 
@@ -18,9 +19,9 @@ class ColumnInfo:
 
     name: str
     type: str
-    default: Optional[str]
+    default: str | None
     nullable: str
-    key: Optional[str]
+    key: str | None
     table_name: str
 
 
@@ -29,20 +30,34 @@ class TableInfo:
     """Dataclass for database table."""
 
     name: str
-    type: str
     description: str
 
 
+ConnectionConfig = TypedDict(
+    "ConnectionConfig",
+    {"driver": str, "host": str, "usernam": str, "database": str, "password": str},
+)
+
+
 class MySQLConnector:
-    def __init__(self, config: dict):
+    def __init__(self, config: ConnectionConfig):  # type: ignore[reportMissingSuperCall]
+        """MySQL connector for the database.
+
+        Parameters
+        ----------
+        config: ConnectionConfig
+            Configuration required by `mysql.connector` to connect to the database.
+        """
         self._config = config
         connection_args = deepcopy(config)
-        connection_args.pop("driver")
+        connection_args.pop("driver")  # type: ignore[reportUnusedCallResult]
         self.connection = mysql.connector.connect(**connection_args)
-        self.help_cache = {}
-        self.table_cache = {}
-        self.table_column_map = defaultdict(dict)
-        self.column_cache = {}
+        self.help_cache: dict[str, str] = {}
+        self.table_cache: dict[str, TableInfo] = {}
+        self.table_column_map: defaultdict[str, dict[str, ColumnInfo]] = defaultdict(
+            dict
+        )
+        self.column_cache: dict[str, ColumnInfo] = {}
         self.generate_caches()
 
     def _get_help_documentation(self):
@@ -73,24 +88,40 @@ class MySQLConnector:
     def _get_schema_tables(self):
         """Initialize table cache."""
         table_query = (
-            f"SELECT TABLE_NAME, TABLE_TYPE FROM INFORMATION_SCHEMA.TABLES"
-            f" WHERE TABLE_SCHEMA='{self._config['database']}';"
+            "SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, "
+            "COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY, COLUMN_DEFAULT "
+            "FROM INFORMATION_SCHEMA.COLUMNS ORDER BY TABLE_SCHEMA, "
+            "TABLE_NAME, ORDINAL_POSITION"
         )
-        result, _ = self.execute_query(table_query)
-        tables = result if result else []
-        for table in tables:
-            result, err = self.execute_query(f"DESCRIBE {table['TABLE_NAME']};")
-            self.table_cache[table["TABLE_NAME"]] = TableInfo(
-                name=table["TABLE_NAME"],
-                type=table["TABLE_TYPE"],
-                description=tabulate_result(result),
+        logger.info(f"tables query: {table_query}")
+        result, e = self.execute_query(table_query)
+        logger.info(f"Schema tables: {result}")
+        logger.info(f"Error: {e}")
+        query_results = result if result else []
+        schema_table_columns: defaultdict[
+            str, defaultdict[str, list[dict[str, str]]]
+        ] = defaultdict(lambda: defaultdict(list))
+        for row in query_results:
+            schema_table_columns[row["TABLE_SCHEMA"]][row["TABLE_NAME"]].append(
+                {
+                    "COLUMN_NAME": row["COLUMN_NAME"],
+                    "COLUMN_TYPE": row["COLUMN_TYPE"],
+                    "IS_NULLABLE": row["IS_NULLABLE"],
+                    "COLUMN_KEY": row["COLUMN_KEY"],
+                    "COLUMN_DEFAULT": row["COLUMN_DEFAULT"],
+                }
             )
-            self.help_cache[table["TABLE_NAME"]] = tabulate_result(result)
+        for schema_tables in schema_table_columns.values():
+            for table_name, table_columns in schema_tables.items():
+                self.table_cache[table_name] = TableInfo(
+                    name=table_name,
+                    description=tabulate_result(table_columns),
+                )
 
     def _get_all_columns(self):
         """Fetch all columns."""
         query = (
-            "SELECT TABLE_CATALOG, TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, "
+            "SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, "
             "COLUMN_DEFAULT, IS_NULLABLE, DATA_TYPE, COLUMN_TYPE, COLUMN_KEY "
             "FROM INFORMATION_SCHEMA.COLUMNS"
         )
@@ -116,7 +147,7 @@ class MySQLConnector:
                     row["TABLE_NAME"],
                 )
 
-    def get_help(self, function: str) -> Optional[str]:
+    def get_help(self, function: str) -> str:
         """Return help documentation for function.
 
         Parameters
@@ -130,13 +161,14 @@ class MySQLConnector:
             Help string from the manual if a valid function.
 
         """
-        return self.help_cache.get(function.lower(), None)
+        return self.help_cache.get(function.lower(), "")
 
     def get_tables(self) -> ValuesView[TableInfo]:
         """Fetch dictionary of table and their types."""
+        logger.info(f"Table cache: {self.table_cache}")
         return self.table_cache.values()
 
-    def get_columns(self, table_name: str = None) -> ValuesView[ColumnInfo]:
+    def get_columns(self, table_name: str = "") -> ValuesView[ColumnInfo]:
         """Fetch list of columns.
 
         If table name is provided and valid, columns for only that table are
@@ -160,29 +192,34 @@ class MySQLConnector:
             return self.table_column_map.get(table_name, {}).values()
         return self.column_cache.values()
 
-    def execute_query(self, query: str) -> Tuple[Optional[List[Dict]], Optional[str]]:
+    def execute_query(
+        self, query: str
+    ) -> tuple[list[dict[str, str]] | None, Exception | None]:
         """Execute the given query on the database.
 
         Parameters
         ----------
-        query: String
+        query: str
             Query to execute.
 
         Returns
         -------
-        Tuple[Optional[List[Dict]], Optional[String]]
+        tuple[list[dict[str, str]] | None, Exception | None]
             A tuple of (results, error). The results are a list of dictionaries
             where the keys are the columns returned by the query.
         """
-        rows, error = [], None
+        rows: list[dict[str, str]] | None = []
+        error: Exception | None = None
         logger.info(f"execute_query (query): {query}")
         try:
+            self.connection.reconnect()
             with self.connection.cursor(dictionary=True) as crsr:
                 crsr.execute(query)
                 for row in crsr:
                     rows.append(row)
         except Exception as e:
             self.connection.reconnect(attempts=2)
+            logger.error(f"{''.join(format_exception(e))}")
             error = e
 
         return rows, error

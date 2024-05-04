@@ -1,14 +1,17 @@
 import logging
-from typing import Any, Dict, Iterator, List, Optional, Union
+
+from collections.abc import Iterator
+from typing import Any, TypedDict
 
 from lsprotocol.types import Position, Range
 from pygls.workspace import TextDocument
+from sqlfluff.core.parser.segments.base import RecordSerialisedSegment
 from tabulate import tabulate
 
 logger = logging.getLogger(__file__)
 
 
-def current_word_range(document: TextDocument, position: Position) -> Optional[Range]:
+def current_word_range(document: TextDocument, position: Position) -> Range | None:
     """Get the range of the word under the cursor."""
     word = document.word_at_position(position)
     word_len = len(word)
@@ -28,7 +31,11 @@ def current_word_range(document: TextDocument, position: Position) -> Optional[R
     return None
 
 
-def get_text_in_range(document: TextDocument, text_range: Union[Range, dict]) -> str:
+PositionAsDict = TypedDict("PositionAsDict", {"line": int, "character": int})
+RangeAsDict = TypedDict("RangeAsDict", {"start": PositionAsDict, "end": PositionAsDict})
+
+
+def get_text_in_range(document: TextDocument, text_range: Range | RangeAsDict) -> str:
     """Get document lines as string given a range."""
     doc_lines = document.lines
     if isinstance(text_range, Range):
@@ -37,7 +44,7 @@ def get_text_in_range(document: TextDocument, text_range: Union[Range, dict]) ->
             text_range.start.character,
         )
         last_line_index, last_char_index = text_range.end.line, text_range.end.character
-    elif isinstance(text_range, dict):
+    elif isinstance(text_range, dict):  # type: ignore[reportUnnecessaryIsInstance]
         first_line_index, first_char_index = (
             text_range["start"]["line"],
             text_range["start"]["character"],
@@ -49,7 +56,7 @@ def get_text_in_range(document: TextDocument, text_range: Union[Range, dict]) ->
     else:
         raise TypeError(
             f"`range` should either be a `Range` object or a dictionary."
-            f" found: {type(text_range)}"
+            + f" found: {type(text_range)}"
         )
 
     if first_line_index == last_line_index:
@@ -59,7 +66,7 @@ def get_text_in_range(document: TextDocument, text_range: Union[Range, dict]) ->
 
     logger.debug("utils (doc_lines):")
     logger.debug(f"{doc_lines}")
-    lines = []
+    lines: list[str] = []
     for i in range(first_line_index - 1, last_line_index):
         logger.debug(f"Line: {i} of {len(doc_lines) - 1}")
         if i == first_line_index:
@@ -71,18 +78,18 @@ def get_text_in_range(document: TextDocument, text_range: Union[Range, dict]) ->
     return "\n".join(lines)
 
 
-def tabulate_result(rows: List[dict]) -> str:
+def tabulate_result(rows: list[dict[str, str]]) -> str:
     """Tabulate the query results"""
     return tabulate(rows, headers="keys", showindex=True, tablefmt="psql")
 
 
 def get_json_segment(
-    parse_result: Dict[str, Any], segment_type: str
-) -> Iterator[Union[str, Dict[str, Any], List[Dict[str, Any]]]]:
+    parse_result: RecordSerialisedSegment, segment_type: str
+) -> Iterator[str | dict[str, Any] | list[dict[str, Any]]]:
     """Recursively search JSON parse result for specified segment type.
 
     Args:
-        parse_result (Dict[str, Any]): JSON parse result from `sqlfluff.fix`.
+        parse_result RecordSerialisedSegment: JSON parse result from `sqlfluff.fix`.
         segment_type (str): The segment type to search for.
 
     Yields:
