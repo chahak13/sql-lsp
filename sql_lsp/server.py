@@ -17,7 +17,6 @@ from lsprotocol.types import (
     TEXT_DOCUMENT_DID_OPEN,
     TEXT_DOCUMENT_FORMATTING,
     TEXT_DOCUMENT_HOVER,
-    CodeDescription,
     CodeActionParams,
     Command,
     CompletionList,
