@@ -147,21 +147,25 @@ class MySQLConnector:
                     row["TABLE_NAME"],
                 )
 
-    def get_help(self, function: str) -> str:
-        """Return help documentation for function.
+    def get_help(self, keyword: str):
+        """Return help documentation for keyword.
 
         Parameters
         ----------
-        function: str
-            Function name to get help for.
+        keyword: str
+            Keyword name to get help for.
 
         Returns
         -------
-        Optional[String]
+        str
             Help string from the manual if a valid function.
 
         """
-        return self.help_cache.get(function.lower(), "")
+        keyword_lower = keyword.lower()
+        if keyword_lower in self.table_cache:
+            return self.table_cache[keyword_lower].description
+        if keyword_lower in self.help_cache:
+            return self.help_cache.get(keyword_lower, "")
 
     def get_tables(self) -> ValuesView[TableInfo]:
         """Fetch dictionary of table and their types."""

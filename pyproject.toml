@@ -7,7 +7,7 @@ sql-ls = "sql_lsp.__main__:main"
 
 [tool.poetry]
 name = "sql-lsp"
-version = "0.0.2"
+version = "0.0.4"
 description = ""
 authors = ["Chahak Mehta <chahakmehta013@gmail.com>"]
 readme = "README.md"

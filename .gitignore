@@ -11,3 +11,6 @@ dist/**
 
 .sql-ls/**
 **/__pycache__/**
+
+.jj/**
+.direnv/**

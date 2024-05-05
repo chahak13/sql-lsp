@@ -91,7 +91,7 @@ class SqlLanguageServerProtocol(LanguageServerProtocol):
         return super().lsp_initialize(params)
 
 
-sql_server = LanguageServer("sql-ls", "v0.0.2", protocol_cls=SqlLanguageServerProtocol)
+sql_server = LanguageServer("sql-ls", "v0.0.4", protocol_cls=SqlLanguageServerProtocol)
 
 
 def _publish_diagnostics(ls: LanguageServer, uri: str):
@@ -195,7 +195,6 @@ def code_action(ls: LanguageServer, params: CodeActionParams) -> list[Command]:
         ),
     ]
     logger.info(f"Trying to send: {commands}")
-    # commands = []
     return commands
 
 
