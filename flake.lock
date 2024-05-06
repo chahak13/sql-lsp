@@ -7,14 +7,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1714931184,
-        "narHash": "sha256-U1xcJZG3oH1fbKPAi13X448qgMJZ1dhegLSE/6DhuCU=",
-        "path": "/home/chahak/Documents/basedpyright-nix",
-        "type": "path"
+        "lastModified": 1715045200,
+        "narHash": "sha256-jlEiIQ7dy3/cqMMZloBiWLN6QY5S4TlIm6FSskTYpLU=",
+        "owner": "chahak13",
+        "repo": "basedpyright-nix",
+        "rev": "7676f6c63040009a152118c06c2de1e78e6e4f0e",
+        "type": "github"
       },
       "original": {
-        "path": "/home/chahak/Documents/basedpyright-nix",
-        "type": "path"
+        "owner": "chahak13",
+        "repo": "basedpyright-nix",
+        "type": "github"
       }
     },
     "flake-utils": {

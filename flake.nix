@@ -3,7 +3,7 @@
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
   inputs.basedpyright-nix = {
-      url = "path:/home/chahak/Documents/basedpyright-nix";
+      url = "github:chahak13/basedpyright-nix";
       inputs.nixpkgs.follows = "nixpkgs";
   };
   inputs.poetry2nix = {
