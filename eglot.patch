@@ -1,5 +1,5 @@
 diff --git a/eglot.el b/eglot.el
-index f247c43..974e7d8 100644
+index f247c43..0ebd544 100644
 --- a/eglot.el
 +++ b/eglot.el
 @@ -3685,7 +3685,15 @@ at point.  With prefix argument, prompt for ACTION-KIND."
@@ -19,3 +19,22 @@ index f247c43..974e7d8 100644
        actions)))
  
  (defalias 'eglot-code-actions-at-mouse (eglot--mouse-call 'eglot-code-actions)
+@@ -3714,7 +3722,17 @@ at point.  With prefix argument, prompt for ACTION-KIND."
+                                           default-action)
+                                   menu-items nil t nil nil default-action)
+                                  menu-items))))))
+-    (eglot-execute server chosen)))
++
++    (if (string-equal (plist-get chosen :command) "switchConnections")
++        (let ((connection (completing-read "Select connection:"
++                                           (split-string
++                                            (eglot-execute server '(:title "Show Connection Aliases"
++                                                                    :command "showConnectionAliases"
++                                                                    :arguments [])) "\n"))))
++          (message "Switching connection to: %s" connection)
++          (plist-put (aref (plist-get chosen :arguments) 0) :connection connection)
++          (eglot-execute server chosen))
++      (eglot-execute server chosen))))
+ 
+ (defmacro eglot--code-action (name kind)
+   "Define NAME to execute KIND code action."
