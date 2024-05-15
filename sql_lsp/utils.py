@@ -5,7 +5,10 @@ from typing import Any, TypedDict
 
 from lsprotocol.types import Position, Range
 from pygls.workspace import TextDocument
+from sqlfluff.core.parser import RawSegment
+from sqlfluff.core.parser.segments import UnparsableSegment
 from sqlfluff.core.parser.segments.base import RecordSerialisedSegment
+from sqlfluff.dialects.dialect_ansi import StatementSegment
 from tabulate import tabulate
 
 logger = logging.getLogger(__file__)
@@ -64,11 +67,8 @@ def get_text_in_range(document: TextDocument, text_range: Range | RangeAsDict) -
             return "\n".join(doc_lines)
         return doc_lines[first_line_index][first_char_index:last_char_index]
 
-    logger.debug("utils (doc_lines):")
-    logger.debug(f"{doc_lines}")
     lines: list[str] = []
     for i in range(first_line_index - 1, last_line_index):
-        logger.debug(f"Line: {i} of {len(doc_lines) - 1}")
         if i == first_line_index:
             lines.append(doc_lines[i][first_char_index:])
         elif i == last_line_index:
@@ -105,3 +105,24 @@ def get_json_segment(
         elif isinstance(v, list):
             for s in v:
                 yield from get_json_segment(s, segment_type)
+
+
+def get_query_statements(segments: list[RawSegment]):
+    statements: list[StatementSegment] = []
+    for segment in segments:
+        if isinstance(segment, StatementSegment) or isinstance(
+            segment, UnparsableSegment
+        ):
+            statements.append(segment)
+    return statements
+
+
+def get_current_query_statement(
+    segments: list[RawSegment], cursor_position: PositionAsDict
+):
+    statements = get_query_statements(segments)
+    for statement in statements:
+        start_line, _ = statement.get_start_loc()
+        end_line, _ = statement.get_end_loc()
+        if start_line <= cursor_position["line"] + 1 <= end_line:
+            return statement

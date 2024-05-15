@@ -2,6 +2,7 @@ import json
 import logging
 import logging.config
 import os
+import traceback
 
 import sqlfluff
 
@@ -32,6 +33,8 @@ from lsprotocol.types import (
     Range,
     TextEdit,
 )
+
+from sqlfluff.core import Lexer, Parser
 from pygls.server import LanguageServer
 from pygls.protocol import LanguageServerProtocol, lsp_method
 from pygls.workspace import TextDocument
@@ -39,7 +42,13 @@ from pygls.workspace import TextDocument
 from .completion import get_completion_candidates
 from .config import fluff_config
 from .database import DBConnection, ConnectionConfig
-from .utils import current_word_range, get_text_in_range, tabulate_result
+from .utils import (
+    current_word_range,
+    get_current_query_statement,
+    get_text_in_range,
+    tabulate_result,
+    get_query_statements,
+)
 
 P = ParamSpec("P")
 
@@ -121,7 +130,6 @@ def completions(ls: LanguageServer, params: CompletionParams):
     items = []
     document = ls.workspace.get_document(params.text_document.uri)
     items = get_completion_candidates(document, params.position, ls.lsp.dbconn)
-    logger.info(f"Completion items: {items}")
     return CompletionList(is_incomplete=False, items=items)
 
 
@@ -193,8 +201,10 @@ def code_action(ls: LanguageServer, params: CodeActionParams) -> list[Command]:
             command="switchConnections",
             arguments=[params],
         ),
+        Command(
+            title="Show Tables in Database", command="showTables", arguments=[params]
+        ),
     ]
-    logger.info(f"Trying to send: {commands}")
     return commands
 
 
@@ -214,12 +224,23 @@ def execute_query(
             + " might not have been initialzied with `LanguageServerProtocol`."
             + " Please check."
         )
-    logger.info(f"chahak: execute_query (args): {args}")
     document_args = args[0][0]
     document = ls.workspace.get_text_document(document_args["uri"])
+
+    lexer = Lexer(config=fluff_config)
+    parser = Parser(config=fluff_config)
+    parsed_query = parser.parse(lexer.lex(document.source)[0])
+    segments = parsed_query.segments
+    statements = get_query_statements(segments)
+
     action_params = args[0][1]
-    query = get_text_in_range(document, action_params["range"])
-    logger.info(f"execute_query(query): {query}")
+    cursor_position = action_params["range"]["start"]
+
+    current_statement = get_current_query_statement(segments, cursor_position)
+    if current_statement is None:
+        return ""
+
+    query = current_statement.raw
     rows, error = ls.lsp.dbconn.execute_query(query)
     if error is not None:
         return str(error)
@@ -237,12 +258,10 @@ def explain_query(
             + " might not have been initialzied with `LanguageServerProtocol`."
             + " Please check."
         )
-    logger.info(f"explain_query (args): {args}")
     document_args = args[0][0]
     document = ls.workspace.get_text_document(document_args["uri"])
     action_params = args[0][1]
     query = "explain " + get_text_in_range(document, action_params["range"])
-    logger.info(f"execute_query(query): {query}")
     rows, error = ls.lsp.dbconn.execute_query(query)
     if error is not None:
         return str(error)
@@ -250,7 +269,7 @@ def explain_query(
 
 
 @sql_server.command("showDatabases")
-def show_databases(ls: LanguageServer) -> str:
+def show_databases(ls: LanguageServer, *args) -> str:
     """Show Databases in the connection."""
     if not ls.lsp.dbconn:
         raise KeyError(
@@ -259,12 +278,14 @@ def show_databases(ls: LanguageServer) -> str:
             + " Please check."
         )
     query = "show databases;"
-    rows = ls.lsp.dbconn.execute_query(query)
+    rows, error = ls.lsp.dbconn.execute_query(query)
+    if error is not None:
+        return "".join(traceback.format_exception(e))
     return tabulate_result(rows)
 
 
 @sql_server.command("showConnections")
-def show_connections(ls: LanguageServer) -> str:
+def show_connections(ls: LanguageServer, *args) -> str:
     """Show available connections."""
     return tabulate_result(
         [
@@ -274,8 +295,24 @@ def show_connections(ls: LanguageServer) -> str:
     )
 
 
+@sql_server.command("showTables")
+def show_databases(ls: LanguageServer, *args) -> str:
+    """Show Databases in the connection."""
+    if not ls.lsp.dbconn:
+        raise KeyError(
+            "DB Connection not found on server. `LanguageServer`"
+            + " might not have been initialzied with `LanguageServerProtocol`."
+            + " Please check."
+        )
+    query = "show tables;"
+    rows, error = ls.lsp.dbconn.execute_query(query)
+    if error is not None:
+        return "".join(traceback.format_exception(e))
+    return tabulate_result(rows)
+
+
 @sql_server.command("showConnectionAliases")
-def show_connection_aliases(ls: LanguageServer) -> str:
+def show_connection_aliases(ls: LanguageServer, *args) -> str:
     """Show aliases for all the connections.
 
     Useful for providing a selection list to switch connections.
@@ -286,7 +323,8 @@ def show_connection_aliases(ls: LanguageServer) -> str:
 @sql_server.command("switchConnections")
 def switch_connections(ls: LanguageServer, *args: tuple[CodeActionParams]):
     """Switch Databases in the connection."""
-    selected_alias = args[0][0]
+    selected_alias = args[0][0]["connection"]
     selected_config = ls.lsp.available_connections[selected_alias]
     ls.lsp.dbconn = DBConnection(selected_config)
     ls.send_notification(f"Changed DB Connection to {selected_alias}")
+    return selected_alias

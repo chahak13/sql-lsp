@@ -164,6 +164,8 @@ class MySQLConnector:
         keyword_lower = keyword.lower()
         if keyword_lower in self.table_cache:
             return self.table_cache[keyword_lower].description
+        if keyword_lower in self.column_cache:
+            return str(self.column_cache[keyword.lower()])
         if keyword_lower in self.help_cache:
             return self.help_cache.get(keyword_lower, "")
 
