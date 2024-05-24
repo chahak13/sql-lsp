@@ -19,8 +19,23 @@ pip install sql-lsp
 
 The language server can be used by starting in the `stdio` mode
 
-``` shell
-sql-ls --stdio
+``` 
+Usage: sql-ls [OPTIONS]
+
+Options:
+  --stdio          Start the server in STDIO mode.
+  --tcp            Start the server in TCP mode. This starts the server on
+                   127.0.0.1 at port 9000 by default. Use `--host` and
+                   `--port` to change these defaults. NOTE: In this mode, the
+                   server should start before the client.
+  --websocket      Start the server as a websocket connection. This is useful
+                   to expose the server to browser based editors.
+  --tcp-host TEXT  Host IP to start the TCP connection on.  [default:
+                   127.0.0.1]
+  --ws-host TEXT   Host IP to start the websocket connection on.  [default:
+                   0.0.0.0]
+  --port INTEGER   Port to start TCP or websocket connection on.
+  --help           Show this message and exit.
 ```
 
 The server gets the completion information by connecting to the database and
@@ -61,3 +76,5 @@ configuration
                  . ("sql-ls" "--stdio")))
 ```
 
+To enable all abilities for the language server, apply the patch provided in the
+repository in the file `eglot.patch` to eglot.

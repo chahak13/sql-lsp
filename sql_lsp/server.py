@@ -100,7 +100,7 @@ class SqlLanguageServerProtocol(LanguageServerProtocol):
         return super().lsp_initialize(params)
 
 
-sql_server = LanguageServer("sql-ls", "v0.0.4", protocol_cls=SqlLanguageServerProtocol)
+sql_server = LanguageServer("sql-ls", "v0.0.7", protocol_cls=SqlLanguageServerProtocol)
 
 
 def _publish_diagnostics(ls: LanguageServer, uri: str):
