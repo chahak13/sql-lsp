@@ -17,8 +17,6 @@ pip install sql-lsp
 
 ## Features and Usage
 
-The language server can be used by starting in the `stdio` mode
-
 ``` 
 Usage: sql-ls [OPTIONS]
 
